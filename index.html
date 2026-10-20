@@ -11,19 +11,27 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="app">
 
-  <!-- Transport -->
-  <section class="module transport" aria-label="Transport">
+<header class="topbar">
+  <div class="topbar-in">
     <div class="brand">
       <span class="logo">PG&nbsp;BEATS</span>
-      <span class="model">GROOVEBOX · PROTOTYP</span>
+      <span class="model">GROOVEBOX</span>
     </div>
-
+    <div class="seg" role="group" aria-label="Wiedergabe">
+      <button type="button" id="mode-loop" aria-pressed="true">Loop</button>
+      <button type="button" id="mode-song" aria-pressed="false">Song</button>
+    </div>
     <button id="play" class="play" type="button" aria-pressed="false">
       <span class="play-icon" aria-hidden="true"></span><span class="play-label">Play</span>
     </button>
+  </div>
+</header>
 
+<main class="app">
+
+  <!-- Tempo / master -->
+  <section class="module master" aria-label="Tempo und Master">
     <div class="field bpm">
       <label for="bpm">Tempo</label>
       <div class="stepper">
@@ -33,38 +41,32 @@
       </div>
       <span class="unit">BPM</span>
     </div>
-
     <div class="field">
       <label for="swing">Swing <output id="swing-out">20&nbsp;%</output></label>
       <input id="swing" type="range" min="0" max="75" step="1" value="20">
     </div>
-
     <div class="field">
       <label for="master">Master <output id="master-out">85&nbsp;%</output></label>
       <input id="master" type="range" min="0" max="100" step="1" value="85">
     </div>
-
     <canvas id="scope" class="scope" width="160" height="44" aria-hidden="true"></canvas>
   </section>
 
-  <!-- Patterns + Chaos -->
-  <section class="module strip" aria-label="Patterns und Chaos">
-    <div class="group">
-      <span class="tag">Pattern</span>
-      <div class="pats" id="pats" role="group" aria-label="Pattern wählen"></div>
-      <button type="button" id="chain" class="toggle" aria-pressed="false" title="Patterns nacheinander abspielen">Kette</button>
-      <button type="button" id="dup" class="ghost" title="Aktuelles Pattern in das nächste kopieren">Kopieren →</button>
+  <!-- Patterns + random tools -->
+  <section class="module strip" aria-label="Patterns">
+    <div class="group pat-group">
+      <span class="tag">Loops</span>
+      <div class="pats" id="pats" role="group" aria-label="Loop bearbeiten"></div>
     </div>
-
-    <div class="group chaos">
-      <button type="button" id="chaos-all" class="chaos-btn" title="Alle Spuren zufällig neu würfeln">CHAOS</button>
+    <div class="group">
+      <button type="button" id="dup" class="ghost" title="Aktuellen Loop in den nächsten kopieren">Kopieren →</button>
+      <button type="button" id="chaos-all" class="chaos-btn" title="Alle Spuren zufällig neu würfeln">Würfeln</button>
       <button type="button" id="mutate" class="ghost" title="Ein paar Steps zufällig ändern">Mutieren</button>
       <div class="field compact">
-        <label for="chaos">Live-Chaos <output id="chaos-out">0&nbsp;%</output></label>
+        <label for="chaos">Variation <output id="chaos-out">0&nbsp;%</output></label>
         <input id="chaos" type="range" min="0" max="100" step="1" value="0">
       </div>
     </div>
-
     <div class="group">
       <label class="tag" for="preset">Preset</label>
       <select id="preset">
@@ -79,41 +81,65 @@
 
   <!-- Sequencer -->
   <section class="module seq" aria-label="Step-Sequencer">
+    <div class="seq-head">
+      <h2 class="sec-title">Loop <span id="edit-name">A</span></h2>
+      <span class="hint-inline">Tippen: an → Akzent → aus · Wischen: malen · Spurname: Klang bearbeiten</span>
+    </div>
     <div id="grid" class="grid"></div>
-    <p class="hint">Tippen: an → Akzent → aus · Über Steps wischen: malen · Spurname: auswählen &amp; vorhören · Leertaste: Play/Stop</p>
   </section>
 
-  <!-- Selected track -->
-  <section class="module track" aria-label="Spur-Einstellungen" id="track-panel">
-    <header class="track-head">
-      <h2 id="track-name">Kick</h2>
-      <div class="track-actions">
-        <button type="button" id="t-audition" class="ghost">Vorhören</button>
-        <button type="button" id="t-random" class="ghost">Würfeln</button>
-        <button type="button" id="t-clear" class="ghost">Leeren</button>
+  <div class="duo">
+    <!-- Kaoss pad -->
+    <section class="module padmod" aria-label="Kaoss-Pad">
+      <div class="pad-head">
+        <h2 class="sec-title">Kaoss-Pad</h2>
+        <button type="button" id="pad-hold" class="toggle" aria-pressed="false" title="Effekt bleibt nach dem Loslassen aktiv">Hold</button>
       </div>
-    </header>
+      <div class="seg pad-modes" id="pad-modes" role="group" aria-label="Pad-Effekt"></div>
+      <div class="pad-wrap" id="pad-wrap">
+        <canvas id="pad" class="pad" aria-label="Touch-Fläche für Effekte"></canvas>
+        <span class="pad-read" id="pad-read">Finger auf die Fläche</span>
+        <span class="ax ax-x" id="ax-x"></span>
+        <span class="ax ax-y" id="ax-y"></span>
+      </div>
+    </section>
 
-    <div class="knobs">
-      <div class="field"><label for="p-vol">Lautstärke <output id="p-vol-out"></output></label><input id="p-vol" type="range" min="0" max="1" step="0.01"></div>
-      <div class="field"><label for="p-tune">Tonhöhe <output id="p-tune-out"></output></label><input id="p-tune" type="range" min="-12" max="12" step="1"></div>
-      <div class="field"><label for="p-decay">Länge <output id="p-decay-out"></output></label><input id="p-decay" type="range" min="0.25" max="2.5" step="0.05"></div>
-      <div class="field"><label for="p-cutoff">Filter <output id="p-cutoff-out"></output></label><input id="p-cutoff" type="range" min="0" max="1" step="0.01"></div>
-      <div class="field"><label for="p-pan">Panorama <output id="p-pan-out"></output></label><input id="p-pan" type="range" min="-1" max="1" step="0.05"></div>
-    </div>
-
-    <div id="keys-wrap" class="keys-wrap" hidden>
-      <div class="keys-head">
-        <span class="tag">Stift-Note</span>
-        <div class="stepper small">
-          <button type="button" id="oct-down" aria-label="Oktave runter">−</button>
-          <output id="pen-out">C2</output>
-          <button type="button" id="oct-up" aria-label="Oktave hoch">+</button>
+    <!-- Selected track -->
+    <section class="module track" aria-label="Spur-Einstellungen" id="track-panel">
+      <header class="track-head">
+        <h2 id="track-name">Kick</h2>
+        <div class="track-actions">
+          <button type="button" id="t-audition" class="ghost">Vorhören</button>
+          <button type="button" id="t-random" class="ghost">Würfeln</button>
+          <button type="button" id="t-clear" class="ghost">Leeren</button>
         </div>
-        <span class="keys-tip">Note wählen, dann Bass-Steps tippen</span>
+      </header>
+      <div class="models" id="models" role="group" aria-label="Klang-Modelle"></div>
+      <div id="sections" class="sections"></div>
+
+      <div id="keys-wrap" class="keys-wrap" hidden>
+        <div class="keys-head">
+          <span class="tag">Stift-Note</span>
+          <div class="stepper small">
+            <button type="button" id="oct-down" aria-label="Oktave runter">−</button>
+            <output id="pen-out">C2</output>
+            <button type="button" id="oct-up" aria-label="Oktave hoch">+</button>
+          </div>
+          <span class="keys-tip">Note wählen, dann Bass-Steps tippen</span>
+        </div>
+        <div id="keys" class="keys"></div>
       </div>
-      <div id="keys" class="keys"></div>
+    </section>
+  </div>
+
+  <!-- Song arranger -->
+  <section class="module song" aria-label="Song">
+    <div class="song-head">
+      <h2 class="sec-title">Song</h2>
+      <span class="hint-inline">Jeder Teil spielt seine Loops gleichzeitig (übereinander) und so oft wie angegeben, dann kommt der nächste Teil. Oben auf „Song“ stellen.</span>
     </div>
+    <ol id="song-list" class="song-list"></ol>
+    <button type="button" id="song-add" class="ghost">+ Teil hinzufügen</button>
   </section>
 
   <p class="foot">iPhone: Lautlos-Schalter aus, sonst bleibt es stumm. Alles wird automatisch in diesem Browser gespeichert.</p>
