@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PG Beats</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Big+Shoulders+Display:wght@700;900&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="app">
+
+  <!-- Transport -->
+  <section class="module transport" aria-label="Transport">
+    <div class="brand">
+      <span class="logo">PG&nbsp;BEATS</span>
+      <span class="model">GROOVEBOX · PROTOTYP</span>
+    </div>
+
+    <button id="play" class="play" type="button" aria-pressed="false">
+      <span class="play-icon" aria-hidden="true"></span><span class="play-label">Play</span>
+    </button>
+
+    <div class="field bpm">
+      <label for="bpm">Tempo</label>
+      <div class="stepper">
+        <button type="button" id="bpm-down" aria-label="Tempo runter">−</button>
+        <input id="bpm" type="number" min="60" max="180" step="1" value="96" inputmode="numeric">
+        <button type="button" id="bpm-up" aria-label="Tempo hoch">+</button>
+      </div>
+      <span class="unit">BPM</span>
+    </div>
+
+    <div class="field">
+      <label for="swing">Swing <output id="swing-out">20&nbsp;%</output></label>
+      <input id="swing" type="range" min="0" max="75" step="1" value="20">
+    </div>
+
+    <div class="field">
+      <label for="master">Master <output id="master-out">85&nbsp;%</output></label>
+      <input id="master" type="range" min="0" max="100" step="1" value="85">
+    </div>
+
+    <canvas id="scope" class="scope" width="160" height="44" aria-hidden="true"></canvas>
+  </section>
+
+  <!-- Patterns + Chaos -->
+  <section class="module strip" aria-label="Patterns und Chaos">
+    <div class="group">
+      <span class="tag">Pattern</span>
+      <div class="pats" id="pats" role="group" aria-label="Pattern wählen"></div>
+      <button type="button" id="chain" class="toggle" aria-pressed="false" title="Patterns nacheinander abspielen">Kette</button>
+      <button type="button" id="dup" class="ghost" title="Aktuelles Pattern in das nächste kopieren">Kopieren →</button>
+    </div>
+
+    <div class="group chaos">
+      <button type="button" id="chaos-all" class="chaos-btn" title="Alle Spuren zufällig neu würfeln">CHAOS</button>
+      <button type="button" id="mutate" class="ghost" title="Ein paar Steps zufällig ändern">Mutieren</button>
+      <div class="field compact">
+        <label for="chaos">Live-Chaos <output id="chaos-out">0&nbsp;%</output></label>
+        <input id="chaos" type="range" min="0" max="100" step="1" value="0">
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="tag" for="preset">Preset</label>
+      <select id="preset">
+        <option value="">laden …</option>
+        <option value="boombap">Boom Bap · 90</option>
+        <option value="house">House · 124</option>
+        <option value="trap">Trap · 140</option>
+        <option value="empty">Leer</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Sequencer -->
+  <section class="module seq" aria-label="Step-Sequencer">
+    <div id="grid" class="grid"></div>
+    <p class="hint">Tippen: an → Akzent → aus · Über Steps wischen: malen · Spurname: auswählen &amp; vorhören · Leertaste: Play/Stop</p>
+  </section>
+
+  <!-- Selected track -->
+  <section class="module track" aria-label="Spur-Einstellungen" id="track-panel">
+    <header class="track-head">
+      <h2 id="track-name">Kick</h2>
+      <div class="track-actions">
+        <button type="button" id="t-audition" class="ghost">Vorhören</button>
+        <button type="button" id="t-random" class="ghost">Würfeln</button>
+        <button type="button" id="t-clear" class="ghost">Leeren</button>
+      </div>
+    </header>
+
+    <div class="knobs">
+      <div class="field"><label for="p-vol">Lautstärke <output id="p-vol-out"></output></label><input id="p-vol" type="range" min="0" max="1" step="0.01"></div>
+      <div class="field"><label for="p-tune">Tonhöhe <output id="p-tune-out"></output></label><input id="p-tune" type="range" min="-12" max="12" step="1"></div>
+      <div class="field"><label for="p-decay">Länge <output id="p-decay-out"></output></label><input id="p-decay" type="range" min="0.25" max="2.5" step="0.05"></div>
+      <div class="field"><label for="p-cutoff">Filter <output id="p-cutoff-out"></output></label><input id="p-cutoff" type="range" min="0" max="1" step="0.01"></div>
+      <div class="field"><label for="p-pan">Panorama <output id="p-pan-out"></output></label><input id="p-pan" type="range" min="-1" max="1" step="0.05"></div>
+    </div>
+
+    <div id="keys-wrap" class="keys-wrap" hidden>
+      <div class="keys-head">
+        <span class="tag">Stift-Note</span>
+        <div class="stepper small">
+          <button type="button" id="oct-down" aria-label="Oktave runter">−</button>
+          <output id="pen-out">C2</output>
+          <button type="button" id="oct-up" aria-label="Oktave hoch">+</button>
+        </div>
+        <span class="keys-tip">Note wählen, dann Bass-Steps tippen</span>
+      </div>
+      <div id="keys" class="keys"></div>
+    </div>
+  </section>
+
+  <p class="foot">iPhone: Lautlos-Schalter aus, sonst bleibt es stumm. Alles wird automatisch in diesem Browser gespeichert.</p>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
