@@ -49,6 +49,18 @@
       <label for="master">Master <output id="master-out">85&nbsp;%</output></label>
       <input id="master" type="range" min="0" max="100" step="1" value="85">
     </div>
+    <div class="field">
+      <span class="sec-sub">Delay-Zeit</span>
+      <div class="seg" id="fx-div" role="group" aria-label="Delay-Zeit"></div>
+    </div>
+    <div class="field">
+      <label for="fx-fb">Delay-Feedback <output id="fx-fb-out">35&nbsp;%</output></label>
+      <input id="fx-fb" type="range" min="0" max="0.9" step="0.01" value="0.35">
+    </div>
+    <div class="field">
+      <label for="fx-size">Hall-Größe <output id="fx-size-out">2.6&nbsp;s</output></label>
+      <input id="fx-size" type="range" min="0.5" max="6" step="0.1" value="2.6">
+    </div>
     <canvas id="scope" class="scope" width="160" height="44" aria-hidden="true"></canvas>
   </section>
 
@@ -84,7 +96,9 @@
     <div class="seq-head">
       <h2 class="sec-title">Loop <span id="edit-name">A</span></h2>
       <span class="hint-inline">Tippen: an → Akzent → aus · Wischen: malen · Spurname: Klang bearbeiten</span>
+      <button type="button" id="tracks-btn" class="ghost tracks-btn" aria-expanded="false" aria-controls="track-toggles">Spuren</button>
     </div>
+    <div id="track-toggles" class="track-toggles" role="group" aria-label="Spuren ein- und ausblenden" hidden></div>
     <div id="grid" class="grid"></div>
   </section>
 
@@ -111,7 +125,17 @@
         <span class="pad-read" id="pad-read">Finger auf die Fläche</span>
         <span class="ax ax-x" id="ax-x"></span>
         <span class="ax ax-y" id="ax-y"></span>
+        <span class="mo-bar" aria-hidden="true"><span id="mo-prog"></span></span>
       </div>
+      <div class="motion">
+        <button type="button" id="mo-rec" class="rec" aria-pressed="false">● Aufnehmen</button>
+        <div class="seg" id="mo-len" role="group" aria-label="Länge der Aufnahme">
+          <button type="button" data-v="1">1&nbsp;T</button><button type="button" data-v="2">2&nbsp;T</button><button type="button" data-v="4">4&nbsp;T</button>
+        </div>
+        <button type="button" id="mo-play" class="toggle" aria-pressed="false">Bewegung abspielen</button>
+        <button type="button" id="mo-clear" class="ghost">Löschen</button>
+      </div>
+      <p class="hint-inline motion-hint">Aufnehmen tippen und im Takt über das Pad wischen. Nach 1, 2 oder 4 Takten stoppt die Aufnahme, dann malt der grüne Punkt deine Bewegung immer wieder nach. Ein neuer Finger auf dem Pad hat Vorrang.</p>
     </section>
 
     <!-- Selected track -->
@@ -135,7 +159,7 @@
             <output id="pen-out">C2</output>
             <button type="button" id="oct-up" aria-label="Oktave hoch">+</button>
           </div>
-          <span class="keys-tip">Note wählen, dann Bass-Steps tippen</span>
+          <span class="keys-tip">Note wählen, dann Steps dieser Spur tippen</span>
         </div>
         <div id="keys" class="keys"></div>
       </div>

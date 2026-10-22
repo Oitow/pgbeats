@@ -20,6 +20,14 @@
   --c-tom: #6fb6c8;
   --c-bass: #b48ce0;
   --c-master: #8fe3b0;
+  --c-rim: #d9a066;
+  --c-crash: #e6dc8f;
+  --c-shaker: #a6c49b;
+  --c-conga: #5aa39a;
+  --c-cowbell: #c4a982;
+  --c-lead: #e27fb8;
+  --c-chord: #8ea8f0;
+  --rec: #e5533d;
 
   --f-display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
   --f-ui: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
@@ -258,6 +266,12 @@ select {
 .step.on1::before, .step.on2::before { color: var(--well); }
 .step.now { outline: 2px solid var(--ink); outline-offset: -2px; transform: scale(.94); }
 
+/* ---------- Track show/hide ---------- */
+.tracks-btn { margin-left: auto; min-height: 32px; font-size: 14px; }
+.track-toggles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.track-toggles .chip { min-height: 30px; font-size: 13px; }
+.track-toggles .chip[aria-pressed="false"] { color: var(--ink-dim); text-decoration: line-through; }
+
 /* ---------- Pad + track side by side ---------- */
 .duo { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 900px) { .duo { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
@@ -287,6 +301,21 @@ select {
   font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim);
 }
 .ax-x { left: 50%; bottom: 6px; translate: -50% 0; white-space: nowrap; }
+.mo-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: transparent; pointer-events: none; }
+.mo-bar span { display: block; height: 100%; width: 0; background: var(--c-master); }
+.pad-wrap.recording { border-color: var(--rec); box-shadow: 0 0 0 2px var(--rec); }
+.pad-wrap.recording .mo-bar span { background: var(--rec); }
+.motion { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.motion .seg button { min-height: 36px; padding: 0 10px; font-size: 14px; }
+.rec {
+  min-height: 38px; padding: 0 14px;
+  border-radius: 8px; border: 1px solid var(--rec);
+  background: transparent; color: var(--rec); font-weight: 600;
+}
+.rec[aria-pressed="true"] { background: var(--rec); color: var(--well); animation: recblink 1s steps(2) infinite; }
+@keyframes recblink { 50% { opacity: .65; } }
+.motion button:disabled { opacity: .4; cursor: default; }
+.motion-hint { margin: 8px 0 0; }
 .ax-y { left: 6px; top: 50%; writing-mode: vertical-rl; rotate: 180deg; translate: 0 -50%; }
 
 /* ---------- Track panel ---------- */
@@ -433,4 +462,8 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .step { transition: none; }
   .step.now { transform: none; }
+  .rec[aria-pressed="true"] { animation: none; }
 }
+
+.master .seg { flex-wrap: nowrap; }
+.master .seg button { padding: 0 10px; }
