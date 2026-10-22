@@ -12,6 +12,9 @@ Alle Sounds werden live per Web Audio API erzeugt – keine Samples, keine Abhä
 - **Song-Modus:** Teile nacheinander, jeder Teil kann mehrere Loops gleichzeitig spielen, mit Wiederholungen
 - **Kaoss-Pad** (XY-Touchfläche) mit 5 Effekten: Filter (Tiefpass/Hochpass + Resonanz), Delay (tempo-synchron),
   Hall, Stutter (Beat-Repeat 1/4–1/32), Crush (Bitcrusher + Drive). „Hold“ hält den Effekt.
+- **Strings:** bis zu 4 Kurven (1, 2 oder 4 Takte), über die ein Punkt im Takt läuft wie bei einem EKG.
+  Jede Kurve steuert einen Regler (Master-Filter, Delay, Hall oder jeden Spur-Regler). Formen: Sinus, Rampe,
+  Rechteck, EKG, Zufall, Flach – oder mit dem Finger frei zeichnen. „Stärke“ regelt, wie stark sie wirkt.
 - Pro Spur: Klang-Modelle, Filter (Tief-/Hoch-/Bandpass, Frequenz, Resonanz), Verzerrung, Delay, Hall,
   Lautstärke, Panorama, Mute/Solo
 - Kick: 808/909/Punch/Sub/Hard, Wellenform, Pitch-Hub, Sweep-Zeit, Klick

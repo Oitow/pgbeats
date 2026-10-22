@@ -68,6 +68,7 @@ let state = {
   patterns: emptyPatterns(),
   tracks: freshTracks(),
   song: [{ pats: [0], reps: 4 }],
+  lanes: [],
 };
 
 /* ================= Parameter definitions (drive the track panel) ================= */
@@ -116,6 +117,68 @@ const SECTIONS = id => [
   ['Filter', ['ftype', 'cutoff', 'reso']],
   ['Mix & Effekte', ['vol', 'pan', 'drive', 'dly', 'rev']],
 ];
+
+/* ================= Strings (modulation lanes) ================= */
+// A curve over 1, 2 or 4 bars. A dot runs along it in time and the curve value drives one control.
+
+const LANE_PTS = 128;
+const MAX_LANES = 4;
+const clamp01 = v => Math.min(1, Math.max(0, v));
+const round2 = v => Math.round(v * 100) / 100;
+const MASTER_TARGETS = {
+  'm.lp':  { label: 'Tiefpass', base: 1, fmt: hzFmt },
+  'm.hp':  { label: 'Hochpass', base: 0, fmt: hzFmt },
+  'm.dly': { label: 'Delay',    base: 0, fmt: pct },
+  'm.rev': { label: 'Hall',     base: 0, fmt: pct },
+};
+const NODE_KEYS = ['cutoff', 'reso', 'vol', 'pan', 'dly', 'rev']; // automated on audio nodes; the rest per note
+const laneKeysFor = id => [...SOUND[id].filter(k => k !== 'wave'), 'cutoff', 'reso', 'vol', 'pan', 'dly', 'rev'];
+
+function targetInfo(target) {
+  const [a, k] = target.split('.');
+  if (a === 'm') {
+    const m = MASTER_TARGETS[target];
+    if (!m) throw new Error('bad target');
+    return { master: true, key: target, label: 'Master · ' + m.label, min: 0, max: 1, base: () => m.base, fmt: m.fmt, color: 'var(--c-master)' };
+  }
+  const tr = TRACKS.find(t => t.id === a), d = DEF[k];
+  if (!tr || !d || !laneKeysFor(a).includes(k)) throw new Error('bad target');
+  return { master: false, id: a, key: k, label: tr.name + ' · ' + d.label, min: d.min, max: d.max,
+    base: () => state.tracks[a][k], fmt: d.fmt, color: tr.color, node: NODE_KEYS.includes(k) };
+}
+
+function ekg(ph) { // one heartbeat: P wave, QRS spike, T wave
+  const g = (c, w, a) => a * Math.exp(-((ph - c) ** 2) / (2 * w * w));
+  return 0.35 + g(0.18, 0.03, 0.08) - g(0.36, 0.008, 0.12) + g(0.4, 0.012, 0.6) - g(0.44, 0.01, 0.25) + g(0.65, 0.05, 0.15);
+}
+const SHAPES = {
+  sine:   { label: 'Sinus',    fn: x => 0.5 + 0.5 * Math.sin(2 * Math.PI * x) },
+  ramp:   { label: 'Rampe',    fn: x => x },
+  square: { label: 'Rechteck', fn: x => (x < 0.5 ? 1 : 0) },
+  ekg:    { label: 'EKG',      fn: x => ekg((x * 4) % 1) },
+  random: { label: 'Zufall',   fn: null },
+  flat:   { label: 'Flach',    fn: () => 0.5 },
+};
+function shapePoints(name) {
+  if (name === 'random') {
+    const vals = Array.from({ length: 8 }, () => round2(Math.random()));
+    return Array.from({ length: LANE_PTS }, (_, i) => vals[Math.floor((i / LANE_PTS) * 8)]);
+  }
+  return Array.from({ length: LANE_PTS }, (_, i) => round2(clamp01(SHAPES[name].fn(i / LANE_PTS))));
+}
+const newLane = (target, shape, len, depth) => ({ target, shape, len, depth, on: true, pts: shapePoints(shape) });
+const defaultLanes = () => [newLane('bass.cutoff', 'sine', 1, 0.7), newLane('hat.decay', 'ekg', 1, 0.8)];
+
+function laneVal(lane, pos) {
+  const f = (((pos % 1) + 1) % 1) * LANE_PTS, i = Math.floor(f) % LANE_PTS, fr = f - Math.floor(f);
+  return lane.pts[i] * (1 - fr) + lane.pts[(i + 1) % LANE_PTS] * fr;
+}
+const lanePos = (lane, bar, step) => ((bar % lane.len) * STEPS + step) / (lane.len * STEPS);
+function modValue(lane, info, bar, step) {
+  const target = info.min + (info.max - info.min) * laneVal(lane, lanePos(lane, bar, step));
+  const base = info.base();
+  return base + (target - base) * lane.depth;
+}
 
 /* ================= Presets ================= */
 
@@ -219,6 +282,15 @@ function applyLoaded(s) {
   const song = Array.isArray(s.song) && s.song.length
     ? s.song.map(p => ({ pats: (p.pats || []).filter(i => i >= 0 && i < NPAT), reps: Math.min(16, Math.max(1, p.reps | 0)) }))
     : [{ pats: [0], reps: 4 }];
+  const lanes = Array.isArray(s.lanes)
+    ? s.lanes.filter(l => {
+        try { targetInfo(l.target); } catch (e) { return false; }
+        return Array.isArray(l.pts) && l.pts.length === LANE_PTS;
+      }).slice(0, MAX_LANES).map(l => ({
+        target: l.target, shape: l.shape || 'custom', len: [1, 2, 4].includes(l.len) ? l.len : 1,
+        depth: clamp01(+l.depth || 0), on: l.on !== false, pts: l.pts.map(v => clamp01(+v || 0)),
+      }))
+    : defaultLanes();
   state = {
     ...state,
     bpm: s.bpm ?? state.bpm, swing: s.swing ?? state.swing, master: s.master ?? state.master, chaos: s.chaos ?? 0,
@@ -226,7 +298,7 @@ function applyLoaded(s) {
     edit: Math.min(NPAT - 1, s.edit ?? s.current ?? 0),
     selected: TRACKS.some(t => t.id === s.selected) ? s.selected : 'kick',
     pen: s.pen ?? 36,
-    patterns: pats, tracks, song,
+    patterns: pats, tracks, song, lanes,
   };
   return true;
 }
@@ -245,6 +317,7 @@ function restore() {
 let ctx = null, noiseBuf, busIn, analyser, masterVol;
 let padFilter, crushPre, crusher, crushPost, padDlySend, padRevSend;
 let delay, dlyFb, dlyFilt, delayIn, revIn, revDamp;
+let laneLP, laneHP, laneDly, laneRev;
 const chains = {};
 let openHatGain = null, lastBass = null, bassPrevFreq = 0;
 
@@ -291,7 +364,11 @@ function ensureAudio() {
     masterVol = ctx.createGain();
     analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
-    busIn.connect(padFilter).connect(crushPre).connect(crusher).connect(crushPost);
+    laneHP = ctx.createBiquadFilter();
+    laneHP.type = 'highpass'; laneHP.frequency.value = 20; laneHP.Q.value = 0.7;
+    laneLP = ctx.createBiquadFilter();
+    laneLP.type = 'lowpass'; laneLP.frequency.value = 20000; laneLP.Q.value = 0.7;
+    busIn.connect(laneHP).connect(laneLP).connect(padFilter).connect(crushPre).connect(crusher).connect(crushPost);
     crushPost.connect(comp).connect(masterVol).connect(analyser).connect(ctx.destination);
 
     // Delay (tempo-synced) and reverb, fed by track sends and the pad
@@ -314,6 +391,10 @@ function ensureAudio() {
     padRevSend = ctx.createGain(); padRevSend.gain.value = 0;
     crushPost.connect(padDlySend).connect(delayIn);
     crushPost.connect(padRevSend).connect(revIn);
+    laneDly = ctx.createGain(); laneDly.gain.value = 0;
+    laneRev = ctx.createGain(); laneRev.gain.value = 0;
+    crushPost.connect(laneDly).connect(delayIn);
+    crushPost.connect(laneRev).connect(revIn);
 
     TRACKS.forEach(t => {
       const filter = ctx.createBiquadFilter();
@@ -342,6 +423,7 @@ const FTYPES = { lp: 'lowpass', hp: 'highpass', bp: 'bandpass' };
 function applyParams(id) {
   if (!ctx) return;
   const p = state.tracks[id], ch = chains[id], now = ctx.currentTime;
+  [ch.gain.gain, ch.filter.Q, ch.dSend.gain, ch.rSend.gain, ch.pan && ch.pan.pan].forEach(a => a && a.cancelScheduledValues(now));
   ch.gain.gain.setTargetAtTime(audible(id) ? (p.vol * p.vol) / (1 + p.drive * 1.5) : 0, now, 0.01);
   const type = FTYPES[p.ftype] || 'lowpass';
   if (ch.filter.type !== type) ch.filter.type = type;
@@ -486,8 +568,8 @@ function hatVoice(t, vel, p, out, dur) {
   return g;
 }
 
-function trigger(id, t, vel, note) {
-  VOICES[id](t, vel, state.tracks[id], chains[id].filter, note);
+function trigger(id, t, vel, note, params = state.tracks[id]) {
+  VOICES[id](t, vel, params, chains[id].filter, note);
 }
 function audition(id, note) {
   ensureAudio();
@@ -561,6 +643,74 @@ function padReadout() {
   return '';
 }
 
+/* ================= Strings engine ================= */
+
+let barCount = 0;
+const laneStarted = new Set();
+const trackGain = (id, v) => (audible(id) ? (v * v) / (1 + state.tracks[id].drive * 1.5) : 0);
+
+function laneNode(info) { // [AudioParam, value converter] for node-level targets
+  if (info.master) {
+    return {
+      'm.lp': [laneLP.frequency, freqHz], 'm.hp': [laneHP.frequency, freqHz],
+      'm.dly': [laneDly.gain, v => v * 0.8], 'm.rev': [laneRev.gain, v => v],
+    }[info.key];
+  }
+  const ch = chains[info.id];
+  switch (info.key) {
+    case 'cutoff': return [ch.filter.frequency, freqHz];
+    case 'reso': return [ch.filter.Q, v => v];
+    case 'vol': return [ch.gain.gain, v => trackGain(info.id, v)];
+    case 'pan': return ch.pan ? [ch.pan.pan, v => v] : null;
+    case 'dly': return [ch.dSend.gain, v => v * 0.8];
+    case 'rev': return [ch.rSend.gain, v => v * 0.9];
+  }
+  return null;
+}
+
+function scheduleLanes(t0, spb) {
+  for (const lane of state.lanes) {
+    if (!lane.on) continue;
+    const info = targetInfo(lane.target);
+    if (!info.master && !info.node) continue;
+    // a bass with filter envelope reads the moving cutoff per note instead
+    if (info.id === 'bass' && info.key === 'cutoff' && state.tracks.bass.envAmt > 0) continue;
+    const node = laneNode(info);
+    if (!node) continue;
+    const [param, conv] = node;
+    for (const sub of [0, 0.5]) {
+      const v = conv(modValue(lane, info, barCount, curStep + sub)), tt = t0 + sub * spb;
+      if (!laneStarted.has(param)) { param.setValueAtTime(v, tt); laneStarted.add(param); }
+      else param.linearRampToValueAtTime(v, tt);
+    }
+  }
+}
+
+function effParams(id) { // track params with per-note string modulation applied
+  const p = state.tracks[id];
+  let e = p;
+  for (const lane of state.lanes) {
+    if (!lane.on) continue;
+    const [a, k] = lane.target.split('.');
+    if (a !== id || (NODE_KEYS.includes(k) && !(id === 'bass' && k === 'cutoff'))) continue;
+    if (e === p) e = { ...p };
+    const v = modValue(lane, targetInfo(lane.target), barCount, curStep);
+    e[k] = k === 'tune' ? Math.round(v) : v;
+  }
+  return e;
+}
+
+function resetTarget(target) {
+  if (!ctx) return;
+  laneStarted.clear();
+  const [a] = target.split('.');
+  if (a !== 'm') { applyParams(a); return; }
+  const now = ctx.currentTime;
+  const [param, val] = { 'm.lp': [laneLP.frequency, 20000], 'm.hp': [laneHP.frequency, 20], 'm.dly': [laneDly.gain, 0], 'm.rev': [laneRev.gain, 0] }[target];
+  param.cancelScheduledValues(now);
+  param.setTargetAtTime(val, now, 0.02);
+}
+
 /* ================= Sequencer clock ================= */
 
 let playing = false, curStep = 0, nextTime = 0, timer = 0;
@@ -569,6 +719,7 @@ const drawQueue = [];
 const GHOST_TRACKS = ['hat', 'tom', 'snare', 'kick'];
 
 function barStart() {
+  barCount = firstBar ? 0 : barCount + 1;
   const song = state.song;
   if (state.mode === 'song' && song.length) {
     if (firstBar) { songPos = 0; songRep = 0; }
@@ -593,7 +744,7 @@ function scheduleStep(i, t) {
       const src = pats.find(p => p.bass[i]);
       if (!src || (c && Math.random() < c * 0.15)) continue;
       const jump = c && Math.random() < c * 0.2 ? 12 : 0;
-      trigger('bass', t, 0.8, src.notes[i] + jump);
+      trigger('bass', t, 0.8, src.notes[i] + jump, effParams('bass'));
       continue;
     }
     const v = pats.reduce((m, p) => Math.max(m, p[tr.id][i]), 0);
@@ -603,7 +754,7 @@ function scheduleStep(i, t) {
       else if (!vel && GHOST_TRACKS.includes(tr.id) && Math.random() < c * (tr.id === 'hat' ? 0.25 : 0.07)) vel = 0.3;
       if (vel) vel *= 1 - Math.random() * c * 0.35;
     }
-    if (vel > 0) trigger(tr.id, t, vel);
+    if (vel > 0) trigger(tr.id, t, vel, undefined, effParams(tr.id));
   }
 }
 
@@ -611,6 +762,7 @@ function scheduler() {
   const spb = 60 / state.bpm / 4; // seconds per 16th
   while (nextTime < ctx.currentTime + 0.12) {
     if (curStep === 0) barStart();
+    scheduleLanes(nextTime, spb);
     const t = nextTime + (curStep % 2 ? state.swing * 0.5 * spb : 0);
     let shown = curStep;
     if (pad.active && pad.mode === 'stutter') {
@@ -629,7 +781,7 @@ function scheduler() {
       stut = null;
       scheduleStep(curStep, t);
     }
-    drawQueue.push({ step: shown, time: t, pats: playPats, songPos, songRep });
+    drawQueue.push({ step: shown, time: t, pats: playPats, songPos, songRep, clock: curStep, tu: nextTime, bar: barCount });
     nextTime += spb;
     curStep = (curStep + 1) % STEPS;
   }
@@ -640,6 +792,8 @@ function start() {
   playing = true;
   curStep = 0;
   firstBar = true;
+  laneStarted.clear();
+  lastEv = null;
   nextTime = ctx.currentTime + 0.06;
   scheduler();
   timer = setInterval(scheduler, 25);
@@ -649,6 +803,8 @@ function stop() {
   playing = false;
   clearInterval(timer);
   drawQueue.length = 0;
+  lastEv = null;
+  state.lanes.forEach(l => resetTarget(l.target));
   setPlayhead(-1);
   setLive(null);
   renderPlay();
@@ -1193,6 +1349,209 @@ function drawPad() {
   }
 }
 
+/* ----- Strings UI ----- */
+
+let lastEv = null;
+let laneViews = [];
+const colorCache = {};
+function cssColor(v) {
+  const m = /var\((--[\w-]+)\)/.exec(v);
+  if (!m) return v;
+  return (colorCache[m[1]] = colorCache[m[1]] || getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim() || '#ece4d4');
+}
+
+function targetOptions(sel) {
+  const opt = (v, l) => `<option value="${v}"${v === sel ? ' selected' : ''}>${l}</option>`;
+  let h = '<optgroup label="Master">' + Object.entries(MASTER_TARGETS).map(([k, m]) => opt(k, 'Master · ' + m.label)).join('') + '</optgroup>';
+  TRACKS.forEach(tr => {
+    h += `<optgroup label="${tr.name}">` + laneKeysFor(tr.id).map(k => opt(`${tr.id}.${k}`, `${tr.name} · ${DEF[k].label}`)).join('') + '</optgroup>';
+  });
+  return h;
+}
+
+function renderLanes() {
+  const box = $('#lanes');
+  box.innerHTML = '';
+  laneViews = state.lanes.map((lane, idx) => {
+    const info = targetInfo(lane.target);
+    const card = document.createElement('div');
+    card.className = 'lane' + (lane.on ? '' : ' off');
+    card.dataset.idx = idx;
+    card.style.setProperty('--c', info.color);
+    card.innerHTML = `
+      <div class="lane-head">
+        <button type="button" class="lane-on" data-act="on" aria-pressed="${lane.on}" aria-label="String ${idx + 1} an oder aus"></button>
+        <select data-act="target" aria-label="Was String ${idx + 1} steuert">${targetOptions(lane.target)}</select>
+        <div class="seg lane-len" role="group" aria-label="Länge in Takten">
+          ${[1, 2, 4].map(n => `<button type="button" data-act="len" data-v="${n}" aria-pressed="${lane.len === n}">${n}&nbsp;T</button>`).join('')}
+        </div>
+        <button type="button" class="del" data-act="del" aria-label="String ${idx + 1} löschen">✕</button>
+      </div>
+      <div class="lane-canvas-wrap">
+        <canvas class="lane-canvas" aria-label="Kurve zeichnen"></canvas>
+        <span class="lane-read"></span>
+      </div>
+      <div class="lane-foot">
+        <div class="shapes" role="group" aria-label="Kurvenform">
+          ${Object.entries(SHAPES).map(([k, s]) => `<button type="button" class="chip" data-act="shape" data-v="${k}" aria-pressed="${lane.shape === k}">${s.label}</button>`).join('')}
+        </div>
+        <div class="field compact">
+          <label for="lane-depth-${idx}">Stärke <output>${pct(lane.depth)}</output></label>
+          <input id="lane-depth-${idx}" type="range" min="0" max="1" step="0.01" value="${lane.depth}" data-act="depth">
+        </div>
+      </div>`;
+    box.appendChild(card);
+    const canvas = card.querySelector('canvas');
+    attachLaneDrawing(canvas, idx);
+    return { canvas, g: canvas.getContext('2d'), read: card.querySelector('.lane-read'), color: cssColor(info.color), text: '' };
+  });
+  $('#lane-add').hidden = state.lanes.length >= MAX_LANES;
+}
+
+function attachLaneDrawing(canvas, idx) {
+  let last = null;
+  const paint = e => {
+    const lane = state.lanes[idx], r = canvas.getBoundingClientRect();
+    const x = clamp01((e.clientX - r.left) / r.width);
+    const y = round2(clamp01(1 - (e.clientY - r.top - 6) / (r.height - 12)));
+    const i = Math.min(LANE_PTS - 1, Math.floor(x * LANE_PTS));
+    if (!last) lane.pts[i] = y;
+    else {
+      const n = Math.abs(i - last[0]) || 1, dir = Math.sign(i - last[0]);
+      for (let s = 0; s <= n; s++) lane.pts[last[0] + dir * s] = round2(last[1] + ((y - last[1]) * s) / n);
+    }
+    last = [i, y];
+    if (lane.shape !== 'custom') {
+      lane.shape = 'custom';
+      canvas.closest('.lane').querySelectorAll('[data-act="shape"]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    }
+  };
+  canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); last = null; paint(e); });
+  canvas.addEventListener('pointermove', e => { if (canvas.hasPointerCapture(e.pointerId)) paint(e); });
+  const end = () => { if (last) { last = null; save(); } };
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+}
+
+function wireLanes() {
+  const box = $('#lanes');
+  box.addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]');
+    if (!b) return;
+    const idx = +b.closest('.lane').dataset.idx, lane = state.lanes[idx];
+    switch (b.dataset.act) {
+      case 'on': lane.on = !lane.on; if (!lane.on) resetTarget(lane.target); break;
+      case 'len': lane.len = +b.dataset.v; break;
+      case 'shape': lane.shape = b.dataset.v; lane.pts = shapePoints(lane.shape); break;
+      case 'del': resetTarget(lane.target); state.lanes.splice(idx, 1); break;
+    }
+    renderLanes();
+    save();
+  });
+  box.addEventListener('change', e => {
+    if (e.target.dataset.act !== 'target') return;
+    const lane = state.lanes[+e.target.closest('.lane').dataset.idx];
+    resetTarget(lane.target);
+    lane.target = e.target.value;
+    renderLanes();
+    save();
+  });
+  box.addEventListener('input', e => {
+    if (e.target.dataset.act !== 'depth') return;
+    const lane = state.lanes[+e.target.closest('.lane').dataset.idx];
+    lane.depth = +e.target.value;
+    e.target.closest('.field').querySelector('output').textContent = pct(lane.depth);
+    if (lane.depth === 0) resetTarget(lane.target);
+    save();
+  });
+  $('#lane-add').addEventListener('click', () => {
+    if (state.lanes.length >= MAX_LANES) return;
+    state.lanes.push(newLane('m.lp', 'sine', 2, 0.8));
+    renderLanes();
+    save();
+  });
+}
+
+function drawLanes() {
+  const dpr = window.devicePixelRatio || 1;
+  let bar = 0, step = 0;
+  if (playing && lastEv && ctx) {
+    const spb = 60 / state.bpm / 4;
+    bar = lastEv.bar;
+    step = lastEv.clock + Math.min(1, Math.max(0, (ctx.currentTime - lastEv.tu) / spb));
+  }
+  state.lanes.forEach((lane, idx) => {
+    const v = laneViews[idx];
+    if (!v) return;
+    const { canvas, g, color } = v;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = '#0f1114';
+    g.fillRect(0, 0, w, h);
+
+    // grid: beats, bars and the middle line
+    const beats = lane.len * 4;
+    for (let b = 1; b < beats; b++) {
+      g.fillStyle = b % 4 === 0 ? '#323845' : '#1d2129';
+      g.fillRect(Math.round((b / beats) * w), 0, 1, h);
+    }
+    g.fillStyle = '#1d2129';
+    g.fillRect(0, Math.round(h / 2), w, 1);
+
+    const yOf = val => h - 6 - val * (h - 12);
+    const xs = w / LANE_PTS;
+    g.lineJoin = 'round';
+    g.strokeStyle = color;
+    g.lineWidth = 2;
+    g.globalAlpha = lane.on ? 0.3 : 0.15;
+    g.beginPath();
+    for (let i = 0; i <= LANE_PTS; i++) {
+      const y = yOf(lane.pts[i % LANE_PTS]);
+      i ? g.lineTo(i * xs, y) : g.moveTo(0, y);
+    }
+    g.stroke();
+    g.globalAlpha = 1;
+
+    const live = playing && lane.on && lastEv;
+    const pos = live ? lanePos(lane, bar, step) : 0;
+    if (live) {
+      // bright trace behind the dot, fading out like a heart monitor
+      const span = 0.4, segs = 48;
+      g.lineWidth = 2.5;
+      for (let k = 0; k < segs; k++) {
+        const p0 = pos - (span * k) / segs, p1 = pos - (span * (k + 1)) / segs;
+        const a0 = ((p0 % 1) + 1) % 1, a1 = ((p1 % 1) + 1) % 1;
+        if (a1 > a0) continue; // skip the wrap-around
+        g.globalAlpha = 1 - k / segs;
+        g.beginPath();
+        g.moveTo(a1 * w, yOf(laneVal(lane, a1)));
+        g.lineTo(a0 * w, yOf(laneVal(lane, a0)));
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+      const dx = pos * w;
+      g.fillStyle = '#0f1114';
+      g.fillRect(dx + 8, 0, w * 0.035, h); // the sweep gap ahead of the dot
+      const dy = yOf(laneVal(lane, pos));
+      g.fillStyle = color;
+      g.globalAlpha = 0.25;
+      g.beginPath(); g.arc(dx, dy, 14, 0, Math.PI * 2); g.fill();
+      g.globalAlpha = 1;
+      g.beginPath(); g.arc(dx, dy, 5, 0, Math.PI * 2); g.fill();
+    }
+
+    const info = targetInfo(lane.target);
+    let val = live && lane.depth > 0 ? modValue(lane, info, bar, step) : null;
+    if (val !== null && !info.master && DEF[info.key].step >= 1) val = Math.round(val);
+    const text = val === null ? info.label : info.fmt(val);
+    if (text !== v.text) { v.text = text; v.read.textContent = text; }
+  });
+}
+
 /* ----- Scope ----- */
 
 const scope = $('#scope');
@@ -1227,12 +1586,14 @@ function frame() {
   if (ctx && playing) {
     while (drawQueue.length && drawQueue[0].time <= ctx.currentTime) {
       const e = drawQueue.shift();
+      lastEv = e;
       setPlayhead(e.step);
       setLive(e);
     }
   }
   drawScope();
   drawPad();
+  drawLanes();
 }
 
 /* ================= Wiring ================= */
@@ -1246,6 +1607,7 @@ function renderAll() {
   renderSong();
   renderPlay();
   renderPadUI();
+  renderLanes();
 }
 
 function wire() {
@@ -1309,6 +1671,7 @@ buildKeys();
 buildPad();
 wire();
 wireSong();
-if (!restore()) loadPreset('boombap');
+wireLanes();
+if (!restore()) { state.lanes = defaultLanes(); loadPreset('boombap'); }
 renderAll();
 requestAnimationFrame(frame);
