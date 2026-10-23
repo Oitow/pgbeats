@@ -68,7 +68,7 @@ const MODELS = {
 const BASE = {
   vol: 0.8, pan: 0, tune: 0, decay: 1,
   ftype: 'lp', cutoff: 1, reso: 0.7, lfoWave: 'sine', lfoRate: 3, lfoAmt: 0,
-  drive: 0, bits: 16, dly: 0, rev: 0, model: null, mute: false, solo: false,
+  drive: 0, bits: 16, dly: 0, rev: 0, duck: 'off', model: null, mute: false, solo: false,
 };
 const SYNTH = { wave: 'sawtooth', sub: 0, detune: 0, envAmt: 0, envDecay: 0.2, attack: 0.005, glide: 0, vib: 0, vibRate: 5, chord: 'min' };
 const SPECIFIC = {
@@ -77,23 +77,25 @@ const SPECIFIC = {
   clap:    { vol: 0.65, pan: 0.1, rev: 0.15 },
   rim:     { vol: 0.5, pan: 0.25 },
   hat:     { vol: 0.45, pan: -0.2 },
-  ohat:    { vol: 0.4, pan: 0.2 },
-  crash:   { vol: 0.35, pan: -0.1 },
+  ohat:    { vol: 0.4, pan: 0.2, duck: 'on' },
+  crash:   { vol: 0.35, pan: -0.1, duck: 'on' },
   shaker:  { vol: 0.4, pan: 0.35 },
   tom:     { vol: 0.6, pan: -0.15, punch: 2, rev: 0.1 },
   conga:   { vol: 0.55, pan: -0.3, punch: 1.4 },
   cowbell: { vol: 0.35, pan: 0.2 },
-  bass:    { ...SYNTH, vol: 0.7, model: 'Deep', ...MODELS.bass.Deep },
-  lead:    { ...SYNTH, vol: 0.5, model: 'Saw', ...MODELS.lead.Saw, dly: 0.25 },
-  chord:   { ...SYNTH, vol: 0.45, model: 'Pad', ...MODELS.chord.Pad, rev: 0.3 },
+  bass:    { ...SYNTH, vol: 0.7, model: 'Deep', ...MODELS.bass.Deep, duck: 'on' },
+  lead:    { ...SYNTH, vol: 0.5, model: 'Saw', ...MODELS.lead.Saw, dly: 0.25, duck: 'on' },
+  chord:   { ...SYNTH, vol: 0.45, model: 'Pad', ...MODELS.chord.Pad, rev: 0.3, duck: 'on' },
 };
 const defaultsFor = id => ({ ...BASE, ...SPECIFIC[id] });
 const freshTracks = () => Object.fromEntries(TRACKS.map(t => [t.id, defaultsFor(t.id)]));
 
 const emptyPattern = () => {
-  const p = { notes: {} };
+  const p = { notes: {}, rat: {}, prob: {} };
   TRACKS.forEach(t => {
     p[t.id] = Array(STEPS).fill(0);
+    p.rat[t.id] = Array(STEPS).fill(1);    // hits per step (roll)
+    p.prob[t.id] = Array(STEPS).fill(100); // chance in percent
     if (t.melodic) p.notes[t.id] = Array(STEPS).fill(t.pen);
   });
   return p;
@@ -109,7 +111,7 @@ let state = {
   song: [{ pats: [0], reps: 4 }],
   lanes: [],
   hidden: [],
-  fx: { div: 3, fb: 0.35, size: 2.6 },
+  fx: { div: 3, fb: 0.35, size: 2.6, pump: 0.4 },
   motion: { len: 1, on: false, slots: null },
 };
 
@@ -152,6 +154,7 @@ const SELECTS = {
   wave:    { label: 'Wellenform', options: { sine: 'Sinus', triangle: 'Dreieck', sawtooth: 'Säge', square: 'Rechteck' } },
   ftype:   { label: 'Filtertyp',  options: { lp: 'Tiefpass', lp24: 'Tiefpass steil', hp: 'Hochpass', hp24: 'Hochpass steil', bp: 'Bandpass', notch: 'Kerbfilter' } },
   lfoWave: { label: 'LFO-Form',   options: { sine: 'Sinus', triangle: 'Dreieck', square: 'Rechteck', sawtooth: 'Säge' } },
+  duck:    { label: 'Sidechain-Pump', options: { on: 'An', off: 'Aus' } },
   chord:   { label: 'Akkord',     options: { min: 'Moll', maj: 'Dur', min7: 'Moll 7', maj7: 'Dur 7', sus4: 'Sus4', pow: 'Power' } },
 };
 const DRUM_BASIC = ['tune', 'decay'];
@@ -169,7 +172,7 @@ const SOUND = {
 const SECTIONS = id => [
   ['Klang', SOUND[id]],
   ['Filter', ['ftype', 'cutoff', 'reso', 'lfoWave', 'lfoRate', 'lfoAmt']],
-  ['Mix & Effekte', ['vol', 'pan', 'drive', 'bits', 'dly', 'rev']],
+  ['Mix & Effekte', ['vol', 'pan', 'drive', 'bits', 'dly', 'rev', ...(id === 'kick' ? [] : ['duck'])]],
 ];
 
 /* ================= Strings (modulation lanes) ================= */
@@ -252,6 +255,9 @@ function buildPattern(def) {
       if (tok !== '.') { p[t.id][i] = 1; p.notes[t.id][i] = noteToMidi(tok); }
     });
   });
+  Object.entries(def.rat || {}).forEach(([id, str]) => {
+    [...str].slice(0, STEPS).forEach((ch, i) => { if (/[2-4]/.test(ch)) p.rat[id][i] = +ch; });
+  });
   return p;
 }
 
@@ -290,9 +296,9 @@ const PRESETS = {
     models: { kick: 'Punch', bass: '808', snare: 'Tight', lead: 'Flöte', chord: 'Pad' },
     params: { clap: { rev: 0.25 }, lead: { rev: 0.35 } },
     patterns: [
-      { kick: 'X......x..x.....', clap: '........X.......', hat: 'x.xxx.x.x.xxxxxx',
+      { kick: 'X......x..x.....', clap: '........X.......', hat: 'x.xxx.x.x.xxxxxx', rat: { hat: '......2.....3..4' },
         bass: 'C2 . . . . . . C2 . . D#2 . . . . .', chord: 'C3 . . . . . . . . . . . . . . .' },
-      { kick: 'X......x..x...x.', clap: '........X......x', hat: 'x.x.xxx.x.xxXxxx', ohat: '......x.........',
+      { kick: 'X......x..x...x.', clap: '........X......x', hat: 'x.x.xxx.x.xxXxxx', ohat: '......x.........', rat: { hat: '..3.....2...2.4.' },
         crash: 'X...............', bass: 'C2 . . . . . . C2 . . D#2 . . . G1 .', chord: 'G#2 . . . . . . . . . . . . . . .' },
       { ohat: '..............X.', tom: '.............xxx', snare: '.......x.......x',
         lead: 'G4 . . D#4 . . C4 . . . . . D4 . D#4 .' },
@@ -337,6 +343,9 @@ function loadPatterns(list) {
   return Array.from({ length: NPAT }, (_, i) => {
     const src = (list || [])[i] || {}, p = emptyPattern();
     TRACKS.forEach(t => { if (Array.isArray(src[t.id])) p[t.id] = src[t.id].slice(0, STEPS).map(v => Math.min(2, Math.max(0, v | 0))); });
+    ['rat', 'prob'].forEach(k => {
+      if (src[k]) TRACKS.forEach(t => { if (Array.isArray(src[k][t.id])) p[k][t.id] = src[k][t.id].slice(0, STEPS); });
+    });
     if (Array.isArray(src.notes)) p.notes.bass = src.notes.slice(0, STEPS); // older saves: bass notes only
     else if (src.notes) MELODIC.forEach(id => { if (Array.isArray(src.notes[id])) p.notes[id] = src.notes[id].slice(0, STEPS); });
     return p;
@@ -482,6 +491,7 @@ function ensureAudio() {
       const filter2 = ctx.createBiquadFilter();
       const shaper = ctx.createWaveShaper();
       const gain = ctx.createGain();
+      const duck = ctx.createGain();
       const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
       const dSend = ctx.createGain(), rSend = ctx.createGain();
       const lfo = ctx.createOscillator(), lfoGain = ctx.createGain();
@@ -490,12 +500,12 @@ function ensureAudio() {
       lfoGain.connect(filter.detune);
       lfoGain.connect(filter2.detune);
       lfo.start();
-      filter.connect(filter2).connect(shaper).connect(gain);
-      const last = pan ? (gain.connect(pan), pan) : gain;
+      filter.connect(filter2).connect(shaper).connect(gain).connect(duck);
+      const last = pan ? (duck.connect(pan), pan) : duck;
       last.connect(busIn);
       last.connect(dSend).connect(delayIn);
       last.connect(rSend).connect(revIn);
-      chains[t.id] = { filter, filter2, shaper, gain, pan, dSend, rSend, lfo, lfoGain, shapeKey: '' };
+      chains[t.id] = { filter, filter2, shaper, gain, duck, pan, dSend, rSend, lfo, lfoGain, shapeKey: '' };
     });
     applyAllParams();
     applyPad();
@@ -533,6 +543,20 @@ function applyParams(id) {
   if (ch.lfo.type !== p.lfoWave) ch.lfo.type = p.lfoWave;
   ch.lfo.frequency.setTargetAtTime(1 / (LFO_DIVS[Math.round(p.lfoRate)][1] * spb()), now, 0.01);
   ch.lfoGain.gain.setTargetAtTime(p.lfoAmt * 2400, now, 0.01);
+  if (p.duck !== 'on' || state.fx.pump <= 0) { ch.duck.gain.cancelScheduledValues(now); ch.duck.gain.setTargetAtTime(1, now, 0.01); }
+}
+
+/* Sidechain pump: each kick pushes the marked tracks down, then they swell back. */
+function pump(t) {
+  const a = state.fx.pump;
+  if (!ctx || a <= 0) return;
+  const low = 1 - a * 0.85, rel = spb() * 0.9;
+  TRACKS.forEach(tr => {
+    if (state.tracks[tr.id].duck !== 'on') return;
+    const g = chains[tr.id].duck.gain;
+    g.setTargetAtTime(low, t, 0.003);
+    g.setTargetAtTime(1, t + 0.03, rel / 3);
+  });
 }
 function applyAllParams() {
   if (!ctx) return;
@@ -937,26 +961,39 @@ function barStart() {
   firstBar = false;
 }
 
+const liveHit = {}; // time of the last live pad hit per track
+
 function scheduleStep(i, t) {
-  const c = state.chaos;
+  const c = state.chaos, s = spb();
   const pats = playPats.map(n => state.patterns[n]);
   for (const tr of TRACKS) {
-    if (!audible(tr.id)) continue;
+    const id = tr.id;
+    if (!audible(id)) continue;
+    if (Math.abs(t - (liveHit[id] ?? -99)) < s * 0.6) continue; // just played live on a pad
+    let src = null, v = 0;
+    for (const p of pats) if (p[id][i] > v) { v = p[id][i]; src = p; } // strongest hit among layered loops
+    if (v && Math.random() * 100 >= src.prob[id][i]) v = 0; // chance step did not fire
+    const hits = v ? src.rat[id][i] : 1;
     if (tr.melodic) {
-      const src = pats.find(p => p[tr.id][i]);
-      if (!src || (c && Math.random() < c * 0.15)) continue;
+      if (!v || (c && Math.random() < c * 0.15)) continue;
       const jump = c && Math.random() < c * 0.2 ? 12 : 0;
-      trigger(tr.id, t, src[tr.id][i] === 2 ? 1 : 0.8, src.notes[tr.id][i] + jump, effParams(tr.id));
+      for (let k = 0; k < hits; k++) {
+        trigger(id, t + (k * s) / hits, (v === 2 ? 1 : 0.8) * (k ? 0.8 : 1), src.notes[id][i] + jump, effParams(id));
+      }
       continue;
     }
-    const v = pats.reduce((m, p) => Math.max(m, p[tr.id][i]), 0);
     let vel = v === 2 ? 1 : v === 1 ? 0.7 : 0;
     if (c > 0) {
       if (vel && Math.random() < c * 0.2) vel = 0;
-      else if (!vel && GHOST_TRACKS.includes(tr.id) && Math.random() < c * (tr.id === 'hat' ? 0.25 : 0.07)) vel = 0.3;
+      else if (!vel && GHOST_TRACKS.includes(id) && Math.random() < c * (id === 'hat' ? 0.25 : 0.07)) vel = 0.3;
       if (vel) vel *= 1 - Math.random() * c * 0.35;
     }
-    if (vel > 0) trigger(tr.id, t, vel, undefined, effParams(tr.id));
+    if (vel <= 0) continue;
+    for (let k = 0; k < hits; k++) {
+      const tk = t + (k * s) / hits;
+      if (id === 'kick') pump(tk);
+      trigger(id, tk, vel * (k ? 0.75 : 1), undefined, effParams(id));
+    }
   }
 }
 
@@ -1008,6 +1045,8 @@ function stop() {
   drawQueue.length = 0;
   lastEv = null;
   if (rec) { rec = null; state.motion.slots = null; renderMotion(); }
+  if (liveRec) { liveRec = false; renderLive(); }
+  if (ctx) TRACKS.forEach(t => { const g = chains[t.id].duck.gain; g.cancelScheduledValues(ctx.currentTime); g.setTargetAtTime(1, ctx.currentTime, 0.01); });
   state.lanes.forEach(l => resetTarget(l.target));
   setPlayhead(-1);
   setLive(null);
@@ -1081,6 +1120,7 @@ function buildGrid() {
     const cell = e.target.closest('.step');
     if (!cell || e.button > 0) return;
     const id = cell.dataset.track, i = +cell.dataset.i;
+    if (stepTool !== 'set') { applyTool(id, i); return; }
     const val = nextValue(id, i);
     paint = { id, val, done: new Set([i]) };
     setStep(id, i, val, true);
@@ -1109,6 +1149,26 @@ function buildGrid() {
   });
 }
 
+let stepTool = 'set';
+const TOOL_HINTS = {
+  set: 'Tippen: an → Akzent → aus · Wischen: malen · Spurname: Klang bearbeiten',
+  roll: 'Roll: Tippe auf einen aktiven Step, um ihn 2-, 3- oder 4-mal schnell zu wiederholen (Hi-Hat-Wirbel).',
+  chance: 'Chance: Tippe auf einen aktiven Step, damit er nur mit 75, 50 oder 25 % Wahrscheinlichkeit spielt.',
+};
+function applyTool(id, i) {
+  const pat = editPat();
+  if (!pat[id][i]) return; // tools change steps that are on
+  if (stepTool === 'roll') pat.rat[id][i] = (pat.rat[id][i] % 4) + 1;
+  else pat.prob[id][i] = { 100: 75, 75: 50, 50: 25, 25: 100 }[pat.prob[id][i]] || 100;
+  if (!playing && stepTool === 'roll') { // preview the roll
+    ensureAudio();
+    const n = pat.rat[id][i], t = ctx.currentTime + 0.01;
+    for (let k = 0; k < n; k++) trigger(id, t + (k * spb()) / n, 0.85, isMelodic(id) ? pat.notes[id][i] : undefined);
+  }
+  renderGrid();
+  save();
+}
+
 function nextValue(id, i) {
   const pat = editPat();
   const v = pat[id][i];
@@ -1119,6 +1179,7 @@ function nextValue(id, i) {
 function setStep(id, i, val, sound) {
   const pat = editPat();
   pat[id][i] = val;
+  if (!val) { pat.rat[id][i] = 1; pat.prob[id][i] = 100; }
   if (isMelodic(id) && val) pat.notes[id][i] = state.pens[id];
   if (val && id === 'ohat') pat.hat[i] = 0;
   if (val && id === 'hat') pat.ohat[i] = 0;
@@ -1138,6 +1199,9 @@ function renderGrid() {
       cell.classList.toggle('on1', v === 1);
       cell.classList.toggle('on2', v === 2);
       cell.textContent = tr.melodic && v ? midiName(pat.notes[tr.id][i]) : '';
+      const rat = pat.rat[tr.id][i], prob = pat.prob[tr.id][i];
+      cell.dataset.badge = v ? [rat > 1 ? '×' + rat : '', prob < 100 ? prob + '%' : ''].filter(Boolean).join(' ') : '';
+      cell.classList.toggle('maybe', !!v && prob < 100);
       cell.setAttribute('aria-pressed', v ? 'true' : 'false');
     });
   });
@@ -1176,7 +1240,7 @@ function buildTrackToggles() {
     b.dataset.track = tr.id;
     b.addEventListener('click', () => {
       state.hidden = state.hidden.includes(tr.id) ? state.hidden.filter(x => x !== tr.id) : [...state.hidden, tr.id];
-      renderTrackToggles(); renderGrid(); save();
+      renderTrackToggles(); renderGrid(); renderLive(); save();
     });
     box.appendChild(b);
   });
@@ -1190,6 +1254,65 @@ function renderTrackToggles() {
   [...$('#track-toggles').children].forEach(b => b.setAttribute('aria-pressed', !state.hidden.includes(b.dataset.track)));
   const shown = TRACKS.length - state.hidden.length;
   $('#tracks-btn').textContent = `Spuren ${shown}/${TRACKS.length}`;
+}
+
+/* ----- Live pads ----- */
+
+const LIVE_KEYS = '1234567890qwer';
+let liveRec = false;
+
+function buildLivePads() {
+  const box = $('#live-pads');
+  TRACKS.forEach((tr, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lpad';
+    b.dataset.track = tr.id;
+    b.style.setProperty('--c', tr.color);
+    b.innerHTML = `<span>${tr.name}</span><kbd>${LIVE_KEYS[i].toUpperCase()}</kbd>`;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); hitPad(tr.id); });
+    b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hitPad(tr.id); } });
+    box.appendChild(b);
+  });
+  $('#live-rec').addEventListener('click', () => {
+    liveRec = !liveRec;
+    if (liveRec && !playing) start();
+    renderLive();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (['input', 'select', 'textarea'].includes(tag)) return;
+    const i = LIVE_KEYS.indexOf(e.key.toLowerCase());
+    if (i >= 0) hitPad(TRACKS[i].id);
+  });
+}
+
+function hitPad(id) {
+  ensureAudio();
+  const now = ctx.currentTime;
+  const p = effParams(id);
+  if (id === 'kick' && audible('kick')) pump(now);
+  trigger(id, now + 0.003, 0.9, isMelodic(id) ? state.pens[id] : undefined, p);
+  const el = document.querySelector(`.lpad[data-track="${id}"]`);
+  if (el) { el.classList.add('hit'); setTimeout(() => el.classList.remove('hit'), 110); }
+  if (liveRec && playing && lastEv) { // quantize to the nearest 1/16 of the loop being edited
+    const i = Math.round(nowPos().step) % STEPS;
+    const pat = editPat();
+    if (!pat[id][i]) pat[id][i] = 1;
+    if (isMelodic(id)) pat.notes[id][i] = state.pens[id];
+    if (id === 'ohat') pat.hat[i] = 0;
+    if (id === 'hat') pat.ohat[i] = 0;
+    liveHit[id] = now;
+    renderGrid(); renderPatterns(); save();
+  }
+}
+
+function renderLive() {
+  const b = $('#live-rec');
+  b.setAttribute('aria-pressed', liveRec);
+  b.textContent = liveRec ? '■ Aufnahme stoppen' : '● Live-Aufnahme';
+  [...$('#live-pads').children].forEach(p => { p.hidden = state.hidden.includes(p.dataset.track); });
 }
 
 /* ----- Loop buttons ----- */
@@ -1253,6 +1376,8 @@ function renderTransport() {
   $('#fx-fb').value = state.fx.fb;
   $('#fx-fb-out').textContent = pct(state.fx.fb);
   $('#fx-size').value = state.fx.size;
+  $('#fx-pump').value = state.fx.pump;
+  $('#fx-pump-out').textContent = pct(state.fx.pump);
   $('#fx-size-out').textContent = Number(state.fx.size).toFixed(1) + ' s';
 }
 
@@ -1463,6 +1588,8 @@ const randNote = id => ROOT[id] + SCALE[Math.floor(Math.random() * SCALE.length)
 function randomizeTrack(id, pat) {
   for (let i = 0; i < STEPS; i++) {
     const on = Math.random() < PROB[id](i);
+    pat.rat[id][i] = on && (id === 'hat' || id === 'shaker') && Math.random() < 0.12 ? 2 + Math.floor(Math.random() * 3) : 1;
+    pat.prob[id][i] = 100;
     if (isMelodic(id)) {
       pat[id][i] = on ? 1 : 0;
       if (on) pat.notes[id][i] = randNote(id);
@@ -1948,6 +2075,7 @@ function renderAll() {
   renderPlay();
   renderPadUI();
   renderLanes();
+  renderLive();
 }
 
 function wire() {
@@ -2016,12 +2144,30 @@ function wire() {
 
   $('#t-audition').addEventListener('click', () => audition(state.selected));
   $('#t-random').addEventListener('click', () => { randomizeTrack(state.selected, editPat()); renderGrid(); renderPatterns(); save(); });
-  $('#t-clear').addEventListener('click', () => { editPat()[state.selected].fill(0); renderGrid(); renderPatterns(); save(); });
+  $('#t-clear').addEventListener('click', () => {
+    const p = editPat(), id = state.selected;
+    p[id].fill(0); p.rat[id].fill(1); p.prob[id].fill(100);
+    renderGrid(); renderPatterns(); save();
+  });
+  $('#tools').addEventListener('click', e => {
+    const b = e.target.closest('button[data-tool]');
+    if (!b) return;
+    stepTool = b.dataset.tool;
+    [...$('#tools').children].forEach(x => x.setAttribute('aria-pressed', x === b));
+    $('#tool-hint').textContent = TOOL_HINTS[stepTool];
+    $('#grid').classList.toggle('tooling', stepTool !== 'set');
+  });
+  $('#fx-pump').addEventListener('input', e => {
+    state.fx.pump = +e.target.value;
+    applyAllParams();
+    renderTransport(); save();
+  });
 }
 
 buildGrid();
 buildTrackToggles();
 buildPatterns();
+buildLivePads();
 buildKeys();
 buildPad();
 wire();

@@ -9,6 +9,11 @@ Alle Sounds werden live per Web Audio API erzeugt – keine Samples, keine Abhä
 
 ## Funktionen
 - 16 Steps pro Spur: Tippen schaltet an → Akzent → aus, Wischen malt Steps
+- **Live-Pads:** alle Instrumente live antippen (oder Tasten 1–0, Q–R); mit „Live-Aufnahme“ landen die Schläge
+  auf dem nächsten 1/16 im Loop
+- **Step-Werkzeuge:** Roll (Step 2–4× schnell wiederholen, z. B. Hi-Hat-Wirbel) und Chance (Step spielt nur mit
+  75/50/25 % Wahrscheinlichkeit)
+- **Sidechain-Pump:** die Kick drückt markierte Spuren (Bass, Lead, Akkord, Open Hat, Becken) kurz weg
 - 8 Loops (A–H), Kopieren, Würfeln, Mutieren, Live-Variation
 - **Song-Modus:** Teile nacheinander, jeder Teil kann mehrere Loops gleichzeitig spielen, mit Wiederholungen
 - **Kaoss-Pad** (XY-Touchfläche) mit 6 Effekten: Filter (Tiefpass/Hochpass + Resonanz), Bandpass, Delay
