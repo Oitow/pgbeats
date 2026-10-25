@@ -28,6 +28,12 @@ Alle Sounds werden live per Web Audio API erzeugt – keine Samples, keine Abhä
 - Master-Effekte: Delay-Zeit, Delay-Feedback, Hall-Größe; Spuren ein- und ausblenden
 - Kick: 808/909/Punch/Sub/Hard, Wellenform, Pitch-Hub, Sweep-Zeit, Klick
 - Bass: Deep/Acid/Reese/808/Pluck, Wellenform, Attack, Sub-Oszillator, Verstimmung, Filter-Hüllkurve, Glide
+- **Projekte:** mehrere Beats unter Namen speichern, laden, löschen; als .json-Datei sichern und wieder öffnen
+- **Audio-Export:** 1/2/4/8 Takte oder den ganzen Song aufnehmen und als .webm/.mp4 speichern
+- **Rückgängig/Wiederholen** (auch Strg+Z / Strg+Umschalt+Z)
+- **Tonart & Skala:** Tonart wechseln transponiert alle Melodien; Würfeln trifft nur Skala-Töne,
+  die Klaviatur blendet Töne außerhalb der Skala ab
+- **Eigene Samples:** pro Drum-Spur eine Audiodatei laden (bleibt auf dem Gerät gespeichert), umschaltbar Sample/Synth
 - Presets: Boom Bap, House, Trap (inkl. Song-Ablauf)
 - Automatisches Speichern im Browser (localStorage)
 

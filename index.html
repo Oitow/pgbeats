@@ -18,6 +18,10 @@
       <span class="logo">PG&nbsp;BEATS</span>
       <span class="model">GROOVEBOX</span>
     </div>
+    <div class="undo" role="group" aria-label="Verlauf">
+      <button type="button" id="undo" aria-label="Rückgängig" title="Rückgängig (Strg+Z)">↶</button>
+      <button type="button" id="redo" aria-label="Wiederholen" title="Wiederholen (Strg+Umschalt+Z)">↷</button>
+    </div>
     <div class="seg" role="group" aria-label="Wiedergabe">
       <button type="button" id="mode-loop" aria-pressed="true">Loop</button>
       <button type="button" id="mode-song" aria-pressed="false">Song</button>
@@ -82,6 +86,11 @@
         <label for="chaos">Variation <output id="chaos-out">0&nbsp;%</output></label>
         <input id="chaos" type="range" min="0" max="100" step="1" value="0">
       </div>
+    </div>
+    <div class="group">
+      <label class="tag" for="key">Tonart</label>
+      <select id="key"></select>
+      <select id="scale" aria-label="Skala"></select>
     </div>
     <div class="group">
       <label class="tag" for="preset">Preset</label>
@@ -167,6 +176,8 @@
           <button type="button" id="t-clear" class="ghost">Leeren</button>
         </div>
       </header>
+      <div class="sample-row" id="sample-row"></div>
+      <input id="sample-file" type="file" accept="audio/*" hidden>
       <div class="models" id="models" role="group" aria-label="Klang-Modelle"></div>
       <div id="sections" class="sections"></div>
 
@@ -193,6 +204,34 @@
     </div>
     <ol id="song-list" class="song-list"></ol>
     <button type="button" id="song-add" class="ghost">+ Teil hinzufügen</button>
+  </section>
+
+  <!-- Projects & export -->
+  <section class="module projects" aria-label="Projekte und Export">
+    <div class="seq-head">
+      <h2 class="sec-title">Projekte &amp; Export</h2>
+      <span class="hint-inline">Ein Projekt speichert Loops, Song, Klänge, Strings und Pad-Bewegung. Eigene Samples bleiben nur auf diesem Gerät.</span>
+    </div>
+    <form id="proj-form" class="proj-form">
+      <label class="tag" for="proj-name">Name</label>
+      <input id="proj-name" type="text" maxlength="40" placeholder="z. B. Sommer-Beat" autocomplete="off">
+      <button type="submit" class="ghost">Speichern</button>
+    </form>
+    <ul id="proj-list" class="proj-list"></ul>
+    <div class="proj-file">
+      <button type="button" id="proj-export" class="ghost">Als Datei sichern</button>
+      <button type="button" id="proj-open" class="ghost">Datei öffnen</button>
+      <input id="proj-import" type="file" accept=".json,application/json" hidden>
+      <span id="proj-msg" class="hint-inline" role="status"></span>
+    </div>
+    <div class="export">
+      <span class="tag">Audio</span>
+      <div class="seg" id="exp-len" role="group" aria-label="Länge der Aufnahme">
+        <button type="button" data-v="1">1&nbsp;T</button><button type="button" data-v="2">2&nbsp;T</button><button type="button" data-v="4">4&nbsp;T</button><button type="button" data-v="8">8&nbsp;T</button><button type="button" data-v="song">Song</button>
+      </div>
+      <button type="button" id="exp-go" class="rec" aria-pressed="false">● Als Audio speichern</button>
+      <span id="exp-msg" class="hint-inline" role="status">Spielt den Beat einmal ab und nimmt ihn dabei auf.</span>
+    </div>
   </section>
 
   <p class="foot">iPhone: Lautlos-Schalter aus, sonst bleibt es stumm. Alles wird automatisch in diesem Browser gespeichert.</p>
